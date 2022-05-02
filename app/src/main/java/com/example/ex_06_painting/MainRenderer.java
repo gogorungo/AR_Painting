@@ -53,6 +53,8 @@ public class MainRenderer implements GLSurfaceView.Renderer {
     public void onSurfaceCreated(GL10 gl10, EGLConfig eglConfig) {
         Log.d("MainRenderer : ","onSurfaceCreated() 실행");
 
+
+        GLES20.glEnable(GLES20.GL_DEPTH_TEST);
                              // R        G           B       A(투명도) --> 노랑색 (1이 최대)
         GLES20.glClearColor(1.0f,1.0f,0.0f,1.0f);
 
@@ -101,12 +103,23 @@ public class MainRenderer implements GLSurfaceView.Renderer {
 //        sphere.draw();
 
 
-//        if(mLineX != null){
-//            if(!mLineX.isInited) {
-//                mLineX.init();
+//        if(currPath != null){
+//            if(!currPath.isInited) {
+//                currPath.init();
 //            }
-//            mLineX.draw();
+//            currPath.update();
+//            currPath.draw();
 //        }
+
+        for(Line currPath : mPaths){
+
+            if(!currPath.isInited) {
+                currPath.init();
+            }
+            currPath.update();
+            currPath.draw();
+        }
+
 
     }
 
@@ -124,7 +137,6 @@ public class MainRenderer implements GLSurfaceView.Renderer {
             // 디스플레이 화면 방향 설정
             session.setDisplayGeometry(rotation, width, height);
             viewprotChanged = false;
-            Log.d("MainRenderer : ","updateSession 실행");
         }
     }
 
@@ -142,7 +154,7 @@ public class MainRenderer implements GLSurfaceView.Renderer {
     void addPoint(float x, float y, float z){
 
         // 점은 선을 그린 이후에 추가
-        if(currPath != null) {
+
 
 //            Sphere sphere = new Sphere();
 //            float[] matrix = new float[16];
@@ -154,19 +166,21 @@ public class MainRenderer implements GLSurfaceView.Renderer {
 //
 //            sphere.setmModelMatrix(matrix);
             
-            // 왜 add가 아니고 update 인가 - add 로 하면 힘들다
-            currPath.updatePoint(x,y,z);
+        // 왜 add가 아니고 update 인가 - add 로 하면 힘들다
+        if(!mPaths.isEmpty()) { // 선이 한개라도 존재한다면
+            // 마지막 선을 가지고 온다
+            Line currPath = mPaths.get(mPaths.size() - 1);
+            currPath.updatePoint(x, y, z);
         }
+
     }
 
-
-    Line currPath = null;
 
     void addLine( float x, float y, float z){
         
         
         // 선 생성
-        currPath = new Line();
+        Line currPath = new Line();
         currPath.updateProjMatrix(mProjMatrix);
 
         float [] matrix = new float[16];
@@ -203,9 +217,21 @@ public class MainRenderer implements GLSurfaceView.Renderer {
         mPointCloud.updateViewMatrix(viewMatrix);
 //        sphere.updateViewMatrix(viewMatrix);
 
-//        if(mLineX != null) {
-//            mLineX.updateViewMatrix(viewMatrix);
+//        if(currPath != null) {
+//            currPath.updateViewMatrix(viewMatrix);
 //        }
+
+        for(Line line : mPaths){
+            line.updateViewMatrix(viewMatrix);
+        }
+    }
+
+    void removePath(){
+
+        if(!mPaths.isEmpty()){ // 선이 존재한다면
+            // 마지막 선을 제거한다
+            mPaths.remove(mPaths.size() -1);
+        }
     }
 
 }

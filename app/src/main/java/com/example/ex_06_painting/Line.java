@@ -16,7 +16,7 @@ public class Line {
     // GPU 를 이용하여 고속 계산하여 화면 처리하기 위한 코드
     String vertexShaderString =
             "attribute vec3 aPosition;" // 3개의 값
-                    + "attribute vec4 aColor;" // 4개의 값
+                    + "uniform vec4 aColor;" // 4개의 값
                     + "uniform mat4 uMVPMatrix;" //(4X4 형태의 상수로 지정)
                     + "varying vec4 vColor;" // 4개의 값
 
@@ -55,8 +55,6 @@ public class Line {
 
 
     FloatBuffer mVertices;
-    FloatBuffer mColors;
-    ShortBuffer mIndices;
     int mProgram;
 
     boolean isInited = false;
@@ -86,30 +84,37 @@ public class Line {
 
         // 버퍼 데이터를 읽어온다
         // 사용할 것, 데이터 크기 (Float.BYTES) = 4 , 버퍼, int 2 (모름)
-        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, mNumPoints * 3 * Float.BYTES, null, GLES20.GL_DYNAMIC_DRAW);
+        GLES20.glBufferSubData(GLES20.GL_ARRAY_BUFFER, 0,mNumPoints * 3 * Float.BYTES, mVertices);
 
         // 사용이 끝난 후 원위치로
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER,0);
 
 
-        //색
-        mColors = ByteBuffer.allocateDirect(mColor.length * 4).
-                order(ByteOrder.nativeOrder()).asFloatBuffer();
-        mColors.put(mColor);
-        mColors.position(0);
-
-
-        // 순서
-        // short 는 * 2
-        mIndices = ByteBuffer.allocateDirect(indices.length * 2).
-                order(ByteOrder.nativeOrder()).asShortBuffer();
-        mIndices.put(indices);
-        mIndices.position(0);
+//        //색
+//        mColors = ByteBuffer.allocateDirect(mColor.length * 4).
+//                order(ByteOrder.nativeOrder()).asFloatBuffer();
+//        mColors.put(mColor);
+//        mColors.position(0);
+//
+//
+//        // 순서
+//        // short 는 * 2
+//        mIndices = ByteBuffer.allocateDirect(indices.length * 2).
+//                order(ByteOrder.nativeOrder()).asShortBuffer();
+//        mIndices.put(indices);
+//        mIndices.position(0);
 
 
     }
 
+
+    // 점 추가, 점 갱신 하기
     void updatePoint(float x, float y, float z){
+
+        // 그린 점의 갯수가 최대치이면 더이상 그리지 않는다
+        if (mNumPoints >= maxPoints -1) {
+            return;
+        }
 
         // 현재 점 번호에 좌표 받는다.
         // mNumPoint * 3 + 0번지
@@ -185,7 +190,7 @@ public class Line {
 
         // 점, 색 계산방식
         int position = GLES20.glGetAttribLocation(mProgram, "aPosition");
-        int color = GLES20.glGetAttribLocation(mProgram, "aColor");
+        int color = GLES20.glGetUniformLocation(mProgram, "aColor");
         int mvp = GLES20.glGetUniformLocation(mProgram, "uMVPMatrix");
 
         float [] mvpMatrix = new float[16];
@@ -196,25 +201,31 @@ public class Line {
         Matrix.multiplyMM(mvMatrix, 0, mViewMatrix, 0 , mModelMatrix, 0);
         Matrix.multiplyMM(mvpMatrix, 0, mProjMatrix, 0 , mvMatrix, 0);
 
-        // mvp 번호에 해당하는 변수에 mvpMatrix 대입
-        GLES20.glUniformMatrix4fv(mvp, 1, false, mvpMatrix,0);
 
+
+        // 색 float * rgba
+//        GLES20.glVertexAttribPointer(color, 3, GLES20.GL_FLOAT,false,4 * 4,mColors);
+
+        // GPU 활성화
+        GLES20.glEnableVertexAttribArray(position);
+
+        // 바인드
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER,mVbo[0]);
 
         // 점, 색 번호에 해당하는 변수에 각각 대입
         // position, 개수, 자료형, 정규화 할것이냐, 스타일 간격(자료형), 좌표
         // 점 float * 3점 (삼각형)
-        GLES20.glVertexAttribPointer(position, 3, GLES20.GL_FLOAT,false,4 * 3,mVertices);
+        GLES20.glVertexAttribPointer(position, 3, GLES20.GL_FLOAT,false,4 * 3,0);
 
+        GLES20.glUniform4f(color, mColor[0],mColor[1],mColor[2],mColor[3]);
 
-        // 색 float * rgba
-        GLES20.glVertexAttribPointer(color, 3, GLES20.GL_FLOAT,false,4 * 4,mColors);
+        // mvp 번호에 해당하는 변수에 mvpMatrix 대입
+        GLES20.glUniformMatrix4fv(mvp, 1, false, mvpMatrix,0);
 
-        // GPU 활성화
-        GLES20.glEnableVertexAttribArray(position);
-        GLES20.glEnableVertexAttribArray(color);
+//        GLES20.glEnableVertexAttribArray(color);
+
 
         // 선 두께
-
         GLES20.glLineWidth(50f);
 
         // 그린다
@@ -223,7 +234,9 @@ public class Line {
 
         // GPU 비활성화
         GLES20.glDisableVertexAttribArray(position);
-        GLES20.glDisableVertexAttribArray(color);
+//        GLES20.glDisableVertexAttribArray(color);
+
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER,0);
 
     }
 

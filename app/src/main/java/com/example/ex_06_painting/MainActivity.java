@@ -8,6 +8,7 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.hardware.display.DisplayManager;
 import android.opengl.GLSurfaceView;
+import android.opengl.Matrix;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Display;
@@ -15,6 +16,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.CheckBox;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
@@ -34,6 +36,9 @@ public class MainActivity extends AppCompatActivity {
 
     Session mSession;
     GLSurfaceView mySerView;
+
+    CheckBox chBox;
+
     MainRenderer mRenderer;
     Config mConfig; // ARCore session 설정 정보를 받을 변수
 
@@ -42,6 +47,14 @@ public class MainActivity extends AppCompatActivity {
 
     // 새로운 선인가, 점 추가인가
     boolean mNewPath = false, mPointAdd = false;
+    
+    // 이전 점을 받을 배열
+    float [] lastPoint = {0.0f,0.0f,0.0f};
+
+    float same_dist = 0.001f;
+
+    float [] projMatrix = new float[16];
+    float [] viewMatrix = new float[16];
 
 
     @Override
@@ -53,6 +66,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         mySerView = (GLSurfaceView) findViewById(R.id.glsurfaceview);
+        chBox = (CheckBox) findViewById(R.id.checkBox);
 
 
         // MainActivity 의 화면 관리 매니져 --> 화면 변화를 감지 : 현재 시스템에서 서비스 지원 (AppCompatActivity)
@@ -134,46 +148,11 @@ public class MainActivity extends AppCompatActivity {
                 // 사용이 끝난 포인트 자원해제 (반드시)
                 pointCloud.release();
 
-                // 새로운 선 그리기
-                if(mNewPath){
-                    // 터치 플래그를 초기화
-                    mNewPath = false;
-
-                    List<HitResult> arr = frame.hitTest(displayX,displayY);
-
-                    for(HitResult hr : arr){
-
-                        // 축
-                        Pose pose = hr.getHitPose();
-
-                        // 새로운 라인 그리기
-                        mRenderer.addLine(pose.tx(),pose.ty(),pose.tz());
-                        break;
-                    }
-                } else if(mPointAdd){ // 점 추가 라면
-
-                    List<HitResult> arr = frame.hitTest(displayX,displayY);
-
-                    for(HitResult hr : arr) {
-
-                        // 축
-                        Pose pose = hr.getHitPose();
-
-                        // 점 추가
-                        mRenderer.addLine(pose.tx(), pose.ty(), pose.tz());
-                        break;
-                    }
-                    mPointAdd = false;
-                }
-
                 // 화면 터치시 작업 끝
 
                 // 카메라 frame 에서 받는다
                 // mPointCloud 에서 렌더링 할때 카메라의 좌표계산을 받아서 처리
                 Camera camera = frame.getCamera();
-
-                float [] projMatrix = new float[16];
-                float [] viewMatrix = new float[16];
 
                 camera.getProjectionMatrix(projMatrix,0,0.1f,100.0f);
                 camera.getViewMatrix(viewMatrix,0);
@@ -184,6 +163,90 @@ public class MainActivity extends AppCompatActivity {
                 mRenderer.updateViewMatrix(viewMatrix);
 
 
+                // 선 그리기
+                if(chBox.isChecked()){ // 스크린 그리기 상태
+
+                    float [] screenPoint = getScreenPoint(
+                            displayX, displayY,
+                            mRenderer.width, mRenderer.height,
+                            projMatrix, viewMatrix);
+
+
+                    // 체크가 아닐 때 그린다
+                    // 새로운 선 그리기
+                    if(mNewPath){
+                        // 터치 플래그를 초기화
+                        mNewPath = false;
+
+                            // 새로운 라인 그리기
+                        mRenderer.addLine(screenPoint[0],screenPoint[1],screenPoint[2]);
+
+                        lastPoint[0] = screenPoint[0];
+                        lastPoint[1] = screenPoint[1];
+                        lastPoint[2] = screenPoint[2];
+
+
+                    } else if(mPointAdd){ // 점 추가 라면
+
+
+                        if(sameChk(screenPoint[0],screenPoint[1],screenPoint[2])){
+                            // 점 추가
+                            mRenderer.addPoint(screenPoint[0],screenPoint[1],screenPoint[2]);
+
+                            lastPoint[0] = screenPoint[0];
+                            lastPoint[1] = screenPoint[1];
+                            lastPoint[2] = screenPoint[2];
+
+                        }
+                        mPointAdd = false;
+                    }
+
+                } else { // 일반 3D 좌표 상태
+                    // 체크가 아닐 때 그린다
+                    // 새로운 선 그리기
+                    if(mNewPath){
+                        // 터치 플래그를 초기화
+                        mNewPath = false;
+
+                        List<HitResult> arr = frame.hitTest(displayX,displayY);
+
+                        for(HitResult hr : arr){
+
+                            // 축
+                            Pose pose = hr.getHitPose();
+
+                            // 새로운 라인 그리기
+                            mRenderer.addLine(pose.tx(),pose.ty(),pose.tz());
+
+                            lastPoint[0] = pose.tx();
+                            lastPoint[1] = pose.ty();
+                            lastPoint[2] = pose.tz();
+
+                            break;
+                        }
+                    } else if(mPointAdd){ // 점 추가 라면
+
+                        List<HitResult> arr = frame.hitTest(displayX,displayY);
+
+                        for(HitResult hr : arr) {
+
+                            // 축
+                            Pose pose = hr.getHitPose();
+
+                            if(sameChk(pose.tx(), pose.ty(), pose.tz())){
+                                // 점 추가
+                                mRenderer.addPoint(pose.tx(), pose.ty(), pose.tz());
+
+                                lastPoint[0] = pose.tx();
+                                lastPoint[1] = pose.ty();
+                                lastPoint[2] = pose.tz();
+
+                                break;
+                            }
+                        }
+                        mPointAdd = false;
+                    }
+                }
             }
         };
 
@@ -316,4 +379,72 @@ public class MainActivity extends AppCompatActivity {
                 WindowManager.LayoutParams.FLAG_FULLSCREEN
         );
     }
+
+    boolean sameChk(float x, float y, float z){
+        float dx = x - lastPoint[0];
+        float dy = y - lastPoint[1];
+        float dz = z - lastPoint[2];
+        boolean res =  Math.sqrt(dx*dx + dy*dy + dz*dz) > same_dist;
+
+        return res;
+    }
+
+    public void removeBtnGo(View view){
+        mRenderer.removePath();
+    }
+
+    //  스크린의 앞쪽에 배치되는 평면
+    float [] getScreenPoint(
+            float x, float y, // 현재 찍힌 좌표
+            float w, float h, // 화면 크기
+            float [] projMatrix, float [] viewMatrix){ // 매트릭스들
+
+
+        float[] position = new float[3];
+        float[] direction = new float[3];
+
+        x = x * 2 / w - 1.0f;
+        y = (h - y) * 2 / h - 1.0f;
+
+        float[] viewProjMat = new float[16];
+        Matrix.multiplyMM(viewProjMat, 0, projMatrix, 0, viewMatrix, 0);
+
+        float[] invertedMat = new float[16];
+        Matrix.setIdentityM(invertedMat, 0);
+        Matrix.invertM(invertedMat, 0, viewProjMat, 0);
+
+        float[] farScreenPoint = new float[]{x, y, 1.0F, 1.0F};
+        float[] nearScreenPoint = new float[]{x, y, -1.0F, 1.0F};
+        float[] nearPlanePoint = new float[4];
+        float[] farPlanePoint = new float[4];
+
+        Matrix.multiplyMV(nearPlanePoint, 0, invertedMat, 0, nearScreenPoint, 0);
+        Matrix.multiplyMV(farPlanePoint, 0, invertedMat, 0, farScreenPoint, 0);
+
+        position[0] = nearPlanePoint[0] / nearPlanePoint[3];
+        position[1] = nearPlanePoint[1] / nearPlanePoint[3];
+        position[2] = nearPlanePoint[2] / nearPlanePoint[3];
+
+        direction[0] = farPlanePoint[0] / farPlanePoint[3] - position[0];
+        direction[1] = farPlanePoint[1] / farPlanePoint[3] - position[1];
+        direction[2] = farPlanePoint[2] / farPlanePoint[3] - position[2];
+
+        //이건 평면을 만드는거 같다
+        normalize(direction);
+
+        position[0] += (direction[0] * 0.1f);
+        position[1] += (direction[1] * 0.1f);
+        position[2] += (direction[2] * 0.1f);
+
+        return position;
+    }
+
+    //평면을 만드는 거?
+    private void normalize(float[] v) {
+        double norm = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+        v[0] /= norm;
+        v[1] /= norm;
+        v[2] /= norm;
+    }
+
 }
